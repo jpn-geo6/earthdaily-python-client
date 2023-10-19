@@ -1,0 +1,7 @@
+earthdaily-python-client
+========================
+
+.. toctree::
+   :maxdepth: 4
+
+   earthdaily
