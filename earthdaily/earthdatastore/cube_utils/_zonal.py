@@ -37,8 +37,12 @@ def datacube_time_stats(datacube, operations):
     datacube = datacube.groupby("time")
     stats = []
     for operation in operations:
-        stat = getattr(datacube, operation)(...)
-        stats.append(stat.expand_dims(dim={"stats": [operation]}))
+        try:
+            stat = getattr(datacube, operation)(...)
+            stats.append(stat.expand_dims(dim={"stats": [operation]}))
+        except Exception as e:
+            print(f"Error occurs during \"{operation}\" operation {e}")
+
     stats = xr.concat(stats, dim="stats")
     return stats
 
@@ -53,12 +57,13 @@ def _rasterize(gdf, dataset, all_touched=False):
 
 
 def zonal_stats_numpy(
-    dataset,
-    gdf,
-    operations=dict(mean=np.nanmean),
-    all_touched=False,
-    preload_datavar=False,
+        dataset,
+        gdf,
+        operations=dict(mean=np.nanmean),
+        all_touched=False,
+        preload_datavar=False,
 ):
+    validate_operations(operations)
     tqdm_bar = tqdm.tqdm(total=len(dataset.data_vars) * dataset.time.size)
 
     feats, yx_pos, idx_start = _rasterize(
@@ -98,13 +103,15 @@ def zonal_stats_numpy(
 
 
 def zonal_stats(
-    dataset,
-    gdf,
-    operations=["mean"],
-    all_touched=False,
-    method="optimized",
-    verbose=False,
+        dataset,
+        gdf,
+        operations=["mean"],
+        all_touched=False,
+        method="optimized",
+        verbose=False,
 ):
+
+    validate_operations(operations)
     tqdm_bar = tqdm.tqdm(total=gdf.shape[0])
 
     if dataset.rio.crs != gdf.crs:
@@ -138,7 +145,7 @@ def zonal_stats(
 
     elif method == "standard":
         for idx_gdb, feat in tqdm.tqdm(
-            gdf.iterrows(), total=gdf.shape[0], disable=not verbose
+                gdf.iterrows(), total=gdf.shape[0], disable=not verbose
         ):
             tqdm_bar.update(1)
             if feat.geometry.geom_type == "MultiPolygon":
@@ -159,3 +166,13 @@ def zonal_stats(
             'method available are : "standard" or "optimized"'
         )
     return xr.concat(zonal_ds_list, dim="feature")
+
+
+def validate_operations(operations):
+    valid_operations = ["count", "mean", "median", "max", "min", "std", "mode"]
+
+    for operation in operations:
+        if operation not in valid_operations:
+            raise ValueError(f"Not allowed operation : {operation}. \n"
+                             f"Valid operations are: {valid_operations}")
+
